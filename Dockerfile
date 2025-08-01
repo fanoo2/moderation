@@ -1,22 +1,24 @@
-# Production build for production optimization
-FROM node:18-alpine AS production
+FROM node:18-alpine
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies  
-RUN npm ci && npm cache clean --force
+# Install dependencies
+RUN npm install
+
+# Copy built application and source files
+COPY . .
+
+# Build the application
+RUN npm run build
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S moderation -u 1001
+    adduser -S moderation -u 1001 -G nodejs
 
-# Copy built application (build locally before Docker)
-COPY --chown=moderation:nodejs dist/ ./dist/
-
-# Change ownership of node_modules to the application user
+# Change ownership to the application user
 RUN chown -R moderation:nodejs .
 
 # Switch to non-root user
