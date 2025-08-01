@@ -14,12 +14,5 @@ coverage/
 .vscode/
 *.tgz
 *.tar.gz
-tests/
-*.test.ts
-jest.config.js
-jest.e2e.config.js
-nodemon.json
-.eslintrc.js
-README.md
 .git/
 .gitignore
