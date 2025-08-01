@@ -84,7 +84,7 @@ export class ModerationService {
     };
   }
 
-  private mockVideoModeration(request: VideoModerationRequest): VideoModerationResult {
+  private mockVideoModeration(_request: VideoModerationRequest): VideoModerationResult {
     const categories: ModerationCategory[] = [
       { category: 'explicit', flagged: false, score: 0.1 },
       { category: 'violence', flagged: false, score: 0.05 },
