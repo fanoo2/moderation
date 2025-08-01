@@ -1,12 +1,12 @@
 export interface ModerationRequest {
   content: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface VideoModerationRequest {
   videoUrl?: string;
   videoData?: Buffer;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ModerationResult {
