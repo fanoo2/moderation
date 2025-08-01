@@ -1,0 +1,42 @@
+
+name: Handle Moderation Service Updates
+
+on:
+  repository_dispatch:
+    types: [moderation-service-updated]
+
+jobs:
+  update-integration:
+    name: Update Moderation Service Integration
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Log dispatch event
+      run: |
+        echo "🔔 Received moderation service update notification"
+        echo "Service: ${{ github.event.client_payload.service }}"
+        echo "Version: ${{ github.event.client_payload.version }}"
+        echo "Image: ${{ github.event.client_payload.image }}"
+        echo "Environment: ${{ github.event.client_payload.environment }}"
+        echo "Timestamp: ${{ github.event.client_payload.timestamp }}"
+
+    - name: Update service configuration
+      run: |
+        # Update your service configuration here
+        # For example, update Helm values or environment variables
+        echo "Updating moderation service endpoint configuration..."
+        
+    - name: Run integration tests
+      if: github.event.client_payload.environment == 'staging'
+      run: |
+        echo "Running integration tests against updated moderation service..."
+        # npm run test:integration
+        
+    - name: Validate production readiness
+      if: github.event.client_payload.environment == 'production'
+      run: |
+        echo "Validating production readiness..."
+        # Add health checks or validation steps

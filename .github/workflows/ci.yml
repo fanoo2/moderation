@@ -216,3 +216,55 @@ jobs:
         echo "🚀 Deploying version ${{ steps.version.outputs.version }} to production"
         echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}"
         # Add actual deployment steps here (kubectl, helm upgrade, etc.)
+
+  notify-dependent-services:
+    name: Notify Dependent Services
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    
+    steps:
+    - name: Dispatch to API Gateway
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.DISPATCH_TOKEN }}
+        repository: ${{ github.repository_owner }}/api-gateway
+        event-type: moderation-service-updated
+        client-payload: |
+          {
+            "service": "moderation-service",
+            "version": "${{ github.ref_name }}",
+            "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}",
+            "environment": "${{ contains(github.ref, 'refs/tags/') && 'production' || 'staging' }}",
+            "timestamp": "${{ github.event.head_commit.timestamp }}"
+          }
+
+    - name: Dispatch to User Service
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.DISPATCH_TOKEN }}
+        repository: ${{ github.repository_owner }}/user-service
+        event-type: moderation-service-updated
+        client-payload: |
+          {
+            "service": "moderation-service",
+            "version": "${{ github.ref_name }}",
+            "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}",
+            "environment": "${{ contains(github.ref, 'refs/tags/') && 'production' || 'staging' }}",
+            "timestamp": "${{ github.event.head_commit.timestamp }}"
+          }
+
+    - name: Dispatch to Content Service
+      uses: peter-evans/repository-dispatch@v3
+      with:
+        token: ${{ secrets.DISPATCH_TOKEN }}
+        repository: ${{ github.repository_owner }}/content-service
+        event-type: moderation-service-updated
+        client-payload: |
+          {
+            "service": "moderation-service",
+            "version": "${{ github.ref_name }}",
+            "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}",
+            "environment": "${{ contains(github.ref, 'refs/tags/') && 'production' || 'staging' }}",
+            "timestamp": "${{ github.event.head_commit.timestamp }}"
+          }
