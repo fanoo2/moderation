@@ -4,7 +4,7 @@
   "description": "Moderation microservice for text and video content",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "start": "node dist/app.js",
     "dev": "nodemon src/app.ts",
     "test": "jest",

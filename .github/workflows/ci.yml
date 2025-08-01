@@ -1,0 +1,218 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint code
+      run: npm run lint
+
+    - name: Build application
+      run: npm run build
+
+    - name: Run unit tests
+      run: npm test
+
+    - name: Run E2E tests
+      run: npm run test:e2e
+
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
+          type=sha
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    
+    services:
+      moderation:
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        ports:
+          - 3000:3000
+        options: >-
+          --health-cmd "node -e \"require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Wait for service to be ready
+      run: |
+        for i in {1..30}; do
+          if curl -f http://localhost:3000/health; then
+            echo "Service is ready"
+            break
+          fi
+          echo "Waiting for service... ($i/30)"
+          sleep 2
+        done
+
+    - name: Test health endpoint
+      run: |
+        response=$(curl -s http://localhost:3000/health)
+        echo "Health response: $response"
+        if echo "$response" | grep -q '"status":"healthy"'; then
+          echo "✅ Health check passed"
+        else
+          echo "❌ Health check failed"
+          exit 1
+        fi
+
+    - name: Test text moderation endpoint
+      run: |
+        response=$(curl -s -X POST -H "Content-Type: application/json" \
+          -d '{"content":"This is a test message"}' \
+          http://localhost:3000/moderate/text)
+        echo "Text moderation response: $response"
+        if echo "$response" | grep -q '"success":true'; then
+          echo "✅ Text moderation test passed"
+        else
+          echo "❌ Text moderation test failed"
+          exit 1
+        fi
+
+    - name: Test video moderation endpoint
+      run: |
+        response=$(curl -s -X POST -H "Content-Type: application/json" \
+          -d '{"videoUrl":"https://example.com/test.mp4"}' \
+          http://localhost:3000/moderate/video)
+        echo "Video moderation response: $response"
+        if echo "$response" | grep -q '"success":true'; then
+          echo "✅ Video moderation test passed"
+        else
+          echo "❌ Video moderation test failed"
+          exit 1
+        fi
+
+  helm-package:
+    name: Package and Publish Helm Chart
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: '3.12.0'
+
+    - name: Package Helm chart
+      run: |
+        helm package helm/moderation-service
+
+    - name: Upload Helm chart artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: helm-chart
+        path: moderation-service-*.tgz
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [smoke-test, helm-package]
+    if: github.ref == 'refs/heads/main'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment"
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+        # Add actual deployment steps here (kubectl, helm upgrade, etc.)
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [smoke-test, helm-package]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Extract version
+      id: version
+      run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying version ${{ steps.version.outputs.version }} to production"
+        echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}"
+        # Add actual deployment steps here (kubectl, helm upgrade, etc.)
