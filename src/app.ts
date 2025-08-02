@@ -50,6 +50,29 @@ if (require.main === module) {
     console.log(`Health check available at: http://localhost:${port}/health`);
     console.log(`Text moderation available at: http://localhost:${port}/moderate/text`);
     console.log(`Video moderation available at: http://localhost:${port}/moderate/video`);
+    
+    // Environment validation warnings
+    console.log('\n=== Environment Validation ===');
+    
+    if (!process.env.OPENAI_API_KEY) {
+      console.warn('⚠️  WARNING: OPENAI_API_KEY not found - text moderation will run in mock mode');
+    } else {
+      console.log('✅ OpenAI API key configured - text moderation will use real API');
+    }
+    
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) {
+      console.warn('⚠️  WARNING: AWS credentials not found - video moderation will run in mock mode');
+    } else {
+      console.log('✅ AWS credentials configured - video moderation will use real API');
+    }
+    
+    const mockMode = (!process.env.OPENAI_API_KEY) || (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY);
+    if (mockMode) {
+      console.warn('🔧 Service is running in MOCK MODE for some features');
+    } else {
+      console.log('🚀 Service is running with all APIs configured');
+    }
+    console.log('==============================\n');
   });
 }
 
